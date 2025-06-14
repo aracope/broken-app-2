@@ -1,0 +1,23 @@
+{
+  "name": "express-2",
+  "version": "1.0.0",
+  "description": "",
+  "main": "jest.config.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aracope/broken-app-2.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/aracope/broken-app-2/issues"
+  },
+  "homepage": "https://github.com/aracope/broken-app-2#readme",
+  "dependencies": {
+    "jest": "^30.0.0"
+  }
+}
