@@ -39,3 +39,59 @@ const result = await db.query(
 );
 ...
 ```
+3. DELETE route doesn’t await User.delete. The response is sent without waiting for the deletion to happen.
+```js
+User.delete(req.params.username);
+return res.json({ message: 'deleted' });
+```
+changed to:
+```js
+await User.delete(req.params.username);
+return res.json({ message: 'deleted' });
+```
+
+4. Login route missing await on authenticate.
+User.authenticate is async, but not awaited. A token with undefined.admin is created.
+```js
+let user = User.authenticate(username, password);
+const token = createTokenForUser(username, user.admin);
+```
+changed to:
+```js
+let user = await User.authenticate(username, password);
+```
+
+5. PATCH route unnecessarily requires admin always
+```js
+router.patch('/:username', authUser, requireLogin, requireAdmin, ...
+```
+changed to:
+```js
+router.patch('/:username', authUser, requireLogin, async function(...
+```
+to rely on this logic in the function
+```js
+if (!req.curr_admin && req.curr_username !== req.params.username) {
+  throw new ExpressError('Only that user or admin can edit a user.', 401);
+}
+```
+
+6. middleware/auth.js:authUser uses jwt.decode instead of jwt.verify
+```js
+let payload = jwt.decode(token);
+req.curr_username = payload.username;
+req.curr_admin = payload.admin;
+```
+* jwt.decode does not check the token signature at all.
+Anyone could send any JWT-like string, and the app would accept it without verifying its authenticity.
+
+* jwt.verify(token, SECRET_KEY) should be used — this ensures the token was really signed with the server’s secret key.
+
+replaced:
+```js
+let payload = jwt.decode(token);
+```
+with:
+```js
+let payload = jwt.verify(token, SECRET_KEY);
+```

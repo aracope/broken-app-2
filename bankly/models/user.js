@@ -126,18 +126,27 @@ class User {
    **/
 
   static async update(username, data) {
+    if (Object.keys(data).length === 0) {
+      throw new ExpressError("No data provided", 400)
+    }
     let { query, values } = sqlForPartialUpdate(
       'users',
       data,
       'username',
       username
     );
+    console.log("Update SQL + values:", query, values);
+    try {
+      const result = await db.query(query, values);
+      const user = result.rows[0];
 
-    const result = await db.query(query, values);
-    const user = result.rows[0];
+      if (!user)
+        throw new ExpressError('No such user', 404);
+      return user;
 
-    if (!user) {
-      throw new ExpressError('No such user', 404);
+    } catch (err) {
+      console.error("DB ERROR:", err);
+      throw err;
     }
 
     return user;

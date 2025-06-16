@@ -101,7 +101,7 @@ describe("GET /users", function() {
   test("should list all users", async function() {
     const response = await request(app)
       .get("/users")
-      .send({ _token: tokens.u1 });
+      .set("authorization", `Bearer ${tokens.u1}`);
     expect(response.statusCode).toBe(200);
     expect(response.body.users.length).toBe(3);
   });
@@ -116,7 +116,7 @@ describe("GET /users/[username]", function() {
   test("should return data on u1", async function() {
     const response = await request(app)
       .get("/users/u1")
-      .send({ _token: tokens.u1 });
+      .set("authorization", `Bearer ${tokens.u1}`);
     expect(response.statusCode).toBe(200);
     expect(response.body.user).toEqual({
       username: "u1",
@@ -137,14 +137,15 @@ describe("PATCH /users/[username]", function() {
   test("should deny access if not admin/right user", async function() {
     const response = await request(app)
       .patch("/users/u1")
-      .send({ _token: tokens.u2 }); // wrong user!
+      .set("authorization", `Bearer ${tokens.u2}`); // wrong user!
     expect(response.statusCode).toBe(401);
   });
 
   test("should patch data if admin", async function() {
     const response = await request(app)
       .patch("/users/u1")
-      .send({ _token: tokens.u3, first_name: "new-fn1" }); // u3 is admin
+      .set("authorization", `Bearer ${tokens.u3}`)
+      .send({ first_name: "new-fn1" }); // u3 is admin
     expect(response.statusCode).toBe(200);
     expect(response.body.user).toEqual({
       username: "u1",
@@ -160,14 +161,16 @@ describe("PATCH /users/[username]", function() {
   test("should disallowing patching not-allowed-fields", async function() {
     const response = await request(app)
       .patch("/users/u1")
-      .send({ _token: tokens.u1, admin: true });
+      .send({ admin: true })
+      .set("authorization", `Bearer ${tokens.u1}`);
     expect(response.statusCode).toBe(401);
   });
 
-  test("should return 404 if cannot find", async function() {
+  it("should return 404 if cannot find", async function() {
     const response = await request(app)
       .patch("/users/not-a-user")
-      .send({ _token: tokens.u3, first_name: "new-fn" }); // u3 is admin
+      .set("authorization", `Bearer ${tokens.u3}`)
+      .send({ first_name: "new-fn" }); // u3 is admin
     expect(response.statusCode).toBe(404);
   });
 });
@@ -181,18 +184,115 @@ describe("DELETE /users/[username]", function() {
   test("should deny access if not admin", async function() {
     const response = await request(app)
       .delete("/users/u1")
-      .send({ _token: tokens.u1 });
+      .set("authorization", `Bearer ${tokens.u1}`);
     expect(response.statusCode).toBe(401);
   });
 
   test("should allow if admin", async function() {
     const response = await request(app)
       .delete("/users/u1")
-      .send({ _token: tokens.u3 }); // u3 is admin
+      .set("authorization", `Bearer ${tokens.u3}`); // u3 is admin
     expect(response.statusCode).toBe(200);
     expect(response.body).toEqual({ message: "deleted" });
   });
 });
+
+describe("Bug Fix Tests", function () {
+
+  it("should 404 if user not found", async function () {
+    const resp = await request(app)
+      .get('/users/nonexistentuser')
+      .set("authorization", `Bearer ${tokens.u1}`);
+    expect(resp.statusCode).toBe(404);
+  });
+
+  it("should not return email/phone in user list", async function () {
+    const resp = await request(app)
+      .get('/users')
+      .set("authorization", `Bearer ${tokens.u1}`);
+    for (let user of resp.body.users) {
+      expect(user).not.toHaveProperty("email");
+      expect(user).not.toHaveProperty("phone");
+    }
+  });
+
+  it("should delete user and return deleted message", async function () {
+    const resp = await request(app)
+      .delete('/users/u2')
+      .set("authorization", `Bearer ${tokens.u3}`);
+    expect(resp.body).toEqual({ message: 'deleted' });
+
+    // Confirm user is gone
+    const getResp = await request(app)
+      .get('/users/u2')
+      .set("authorization", `Bearer ${tokens.u3}`);
+    expect(getResp.statusCode).toBe(404);
+  });
+
+  it("should 404 on deleting non-existent user", async function () {
+    const response = await request(app)
+      .delete("/users/no_user")
+      .set("authorization", `Bearer ${tokens.u3}`);
+    expect(response.statusCode).toBe(404);
+  });
+
+
+  it("should return token when correct login given", async function () {
+    const resp = await request(app)
+      .post('/auth/login')
+      .send({ username: 'u2', password: 'pwd2' });
+    expect(resp.body).toHaveProperty("token");
+  });
+
+  it("should allow user to edit their own profile", async function () {
+    const resp = await request(app)
+      .patch('/users/u1')
+      .send({ first_name: "NewName" })
+      .set("authorization", `Bearer ${tokens.u1}`);
+    expect(resp.body.user.first_name).toBe("NewName");
+  });
+
+  it("should reject a forged token", async function () {
+    const fakeToken = jwt.sign(
+      { username: "u2", admin: false },
+      "wrongsecret"
+    );
+    const resp = await request(app)
+      .get('/users')
+      .set("authorization", `Bearer ${fakeToken}`);
+    expect(resp.statusCode).toBe(401);
+  });
+
+  it("should reject bad password", async function () {
+    const response = await request(app)
+      .post("/auth/login")
+      .send({
+        username: "u1",
+        password: "wrongpassword"
+      });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("should reject invalid username", async function () {
+    const response = await request(app)
+      .post("/auth/login")
+      .send({
+        username: "no_user",
+        password: "pwd1"
+      });
+    expect(response.statusCode).toBe(401);
+  });
+
+  test("should reject malformed token", async function () {
+    const response = await request(app)
+      .get("/users")
+      .send({ _token: "thisisnotavalidtoken" });
+    expect(response.statusCode).toBe(401);
+  });
+
+
+});
+
 
 afterEach(async function() {
   await db.query("DELETE FROM users");

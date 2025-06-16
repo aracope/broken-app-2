@@ -30,6 +30,10 @@ function sqlForPartialUpdate(table, items, key, id) {
     idx += 1;
   }
 
+  if (columns.length === 0) {
+    throw new ExpressError("No valid data provided for update", 400);
+  }
+
   // build query
   let cols = columns.join(", ");
   let query = `UPDATE ${table} SET ${cols} WHERE ${key}=$${idx} RETURNING *`;
